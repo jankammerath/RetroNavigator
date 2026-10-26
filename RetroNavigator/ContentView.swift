@@ -213,11 +213,11 @@ private struct ClassicBoxButtonStyle: ButtonStyle {
         case .close:
             EmptyView()
         case .zoom:
-            // Small square nested in the top-left corner.
+            // Small square in the top-left corner, sharing the outer box's border.
             Rectangle()
                 .strokeBorder(Platinum.darkShadow, lineWidth: 1)
                 .frame(width: 7, height: 7)
-                .frame(width: 11, height: 11, alignment: .topLeading)
+                .frame(width: 13, height: 13, alignment: .topLeading)
         case .collapse:
             // Horizontal bar across the middle.
             VStack(spacing: 0) {
