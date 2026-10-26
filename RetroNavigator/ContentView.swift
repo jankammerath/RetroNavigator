@@ -10,10 +10,12 @@ import AppKit
 import WebKit
 
 struct ContentView: View {
-    private static let homeURL = URL(string: "https://en.wikipedia.org/wiki/Netscape_Navigator")!
+    @AppStorage(BrowserSettings.homePageKey) private var homePage = BrowserSettings.defaultHomePage
+    @AppStorage(BrowserSettings.waybackEnabledKey) private var isWaybackEnabled = false
+    @AppStorage(BrowserSettings.waybackDateKey) private var waybackDate = BrowserSettings.defaultWaybackDate
 
-    @State private var page = WebPage.withClassicScrollBars()
-    @State private var address = ContentView.homeURL.absoluteString
+    @State private var page = WebPage.makeBrowserPage()
+    @State private var address = ""
     @State private var isNavigationToolbarCollapsed = false
     @State private var isLocationBarCollapsed = false
 
@@ -43,14 +45,55 @@ struct ContentView: View {
         }
         // The Platinum look is light-only; keep text dark in Dark Mode.
         .environment(\.colorScheme, .light)
-        .onAppear {
-            page.load(Self.homeURL)
+        .task {
+            // Configure the proxy before the first load so the home page
+            // already comes from the archive when time travel is on.
+            await applyWaybackSettings()
+            loadHomePage()
         }
         // Keep the Location field in sync with redirects and clicked links.
         .onChange(of: page.url) { _, newURL in
             if let newURL {
                 address = newURL.absoluteString
             }
+        }
+        .onChange(of: isWaybackEnabled) {
+            Task { await travelToSelectedTime() }
+        }
+        .onChange(of: waybackDate) {
+            Task { await travelToSelectedTime() }
+        }
+    }
+
+    /// Routes WebKit through the Wayback proxy while time travel is enabled.
+    private func applyWaybackSettings() async {
+        let dataStore = WKWebsiteDataStore.default()
+        if isWaybackEnabled, let configuration = try? await WaybackProxy.shared.proxyConfiguration() {
+            dataStore.proxyConfigurations = [configuration]
+        } else {
+            dataStore.proxyConfigurations = []
+        }
+        // Cached pages from the live web or another date must not be reused.
+        await dataStore.removeData(
+            ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache],
+            modifiedSince: .distantPast
+        )
+    }
+
+    /// Applies changed Wayback settings and reloads the current page in the
+    /// newly selected time (or the present).
+    private func travelToSelectedTime() async {
+        await applyWaybackSettings()
+        if let url = page.url {
+            page.load(url)
+        } else {
+            loadHomePage()
+        }
+    }
+
+    private func loadHomePage() {
+        if let url = BrowserSettings.url(from: homePage) {
+            page.load(url)
         }
     }
 
@@ -69,10 +112,7 @@ struct ContentView: View {
 
     /// Loads the typed address, adding a scheme if none was given.
     private func loadAddress() {
-        let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        let withScheme = text.contains("://") ? text : "http://" + text
-        if let url = URL(string: withScheme) {
+        if let url = BrowserSettings.url(from: address) {
             page.load(url)
         }
     }
@@ -101,7 +141,7 @@ struct ContentView: View {
         case .reload:
             page.reload()
         case .home:
-            page.load(Self.homeURL)
+            loadHomePage()
         case .stop:
             page.stopLoading()
         case .print:

@@ -17,7 +17,7 @@ struct RetroNavigatorApp: App {
         // square-cornered window that still becomes key. ContentView draws
         // the Mac OS 9 style chrome itself.
         Settings {
-            EmptyView()
+            SettingsView()
         }
     }
 }

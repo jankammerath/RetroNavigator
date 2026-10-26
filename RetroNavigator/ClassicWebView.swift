@@ -96,10 +96,16 @@ struct ClassicWebView: View {
 }
 
 extension WebPage {
-    /// Creates a page whose native scroll bars are hidden with a user
-    /// stylesheet, so only the Platinum scroll bars are visible.
-    static func withClassicScrollBars() -> WebPage {
+    /// Creates the browser's page: native scroll bars are hidden with a user
+    /// stylesheet so only the Platinum scroll bars are visible, and the
+    /// Wayback navigation decider is attached.
+    static func makeBrowserPage() -> WebPage {
         var configuration = WebPage.Configuration()
+        // The Wayback proxy is configured on the default data store.
+        configuration.websiteDataStore = .default()
+        // Silent http → https upgrades would bypass the Wayback proxy, which
+        // only serves plain http. Live sites still redirect to https themselves.
+        configuration.upgradeKnownHostsToHTTPS = false
         let css = """
         html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
         html { scrollbar-width: none; }
@@ -113,7 +119,11 @@ extension WebPage {
         """
         let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(script)
-        return WebPage(configuration: configuration)
+
+        let decider = WaybackNavigationDecider()
+        let page = WebPage(configuration: configuration, navigationDecider: decider)
+        decider.page = page
+        return page
     }
 }
 
