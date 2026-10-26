@@ -39,7 +39,8 @@ struct ClassicWebView: View {
     @State private var scrollPosition = ScrollPosition()
 
     var body: some View {
-        HStack(spacing: 0) {
+        // Negative spacing makes adjacent 1px borders overlap into single lines.
+        HStack(spacing: -1) {
             VStack(spacing: 0) {
                 WebView(page)
                     .scrollIndicators(.hidden)
@@ -56,7 +57,7 @@ struct ClassicWebView: View {
                     onScrollBy: { scroll(.horizontal, by: $0) }
                 )
             }
-            VStack(spacing: 0) {
+            VStack(spacing: -1) {
                 ClassicScrollBar(
                     axis: .vertical,
                     offset: metrics?.offsetY ?? 0,

@@ -145,9 +145,9 @@ struct ClassicWindow<Content: View>: View {
             titleBar
             if !isCollapsed {
                 content
-                    // Inset well around the content area.
+                    // 1px outline around the content area. Scroll bars and the
+                    // status bar share this edge, so there's no inner bevel.
                     .overlay(Rectangle().strokeBorder(Platinum.darkShadow, lineWidth: 1))
-                    .bevel(light: Platinum.shadow, dark: Platinum.highlight)
                     // Placed over the well's bottom/right edges so the grow box
                     // merges seamlessly with the platinum window frame.
                     .overlay(alignment: .bottomTrailing) {
@@ -355,13 +355,10 @@ private struct GrowBox: View {
         }
         .frame(width: 15, height: 15)
         .background(Platinum.face)
-        .overlay {
-            // Separator lines against the content area.
-            ZStack(alignment: .topLeading) {
-                Color.clear
-                Rectangle().fill(Platinum.darkShadow).frame(width: 15, height: 1)
-                Rectangle().fill(Platinum.darkShadow).frame(width: 1, height: 15)
-            }
+        .overlay(alignment: .leading) {
+            // Separator against the status bar. The top edge is provided by
+            // the scroll bar corner directly above.
+            Rectangle().fill(Platinum.darkShadow).frame(width: 1)
         }
         .contentShape(Rectangle())
         .gesture(resizeGesture)
