@@ -37,6 +37,7 @@ struct ContentView: View {
                     .overlay(alignment: .top) {
                         Rectangle().fill(Platinum.darkShadow).frame(height: 1)
                     }
+                StatusBar(message: statusMessage, progress: page.isLoading ? page.estimatedProgress : nil)
             }
             .background(Platinum.face)
         }
@@ -51,6 +52,19 @@ struct ContentView: View {
                 address = newURL.absoluteString
             }
         }
+    }
+
+    /// Navigator-style status messages for the current loading state.
+    private var statusMessage: String {
+        let host = page.url?.host() ?? "host"
+        if page.isLoading {
+            if page.estimatedProgress < 0.1 {
+                return "Connect: Contacting host \(host)..."
+            }
+            let percent = Int(page.estimatedProgress * 100)
+            return "Transferring data from \(host)... (\(percent)%)"
+        }
+        return page.url == nil ? "" : "Document: Done"
     }
 
     /// Loads the typed address, adding a scheme if none was given.

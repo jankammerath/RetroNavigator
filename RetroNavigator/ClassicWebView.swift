@@ -12,7 +12,6 @@ import WebKit
 // MARK: - Web view with classic scroll bars
 
 /// Shows a `WebPage` with Platinum scroll bars on the right and bottom.
-/// The square where they meet is left free for the window's grow box.
 struct ClassicWebView: View {
     let page: WebPage
 
@@ -66,9 +65,10 @@ struct ClassicWebView: View {
                     onScrollTo: { scroll(.vertical, to: $0) },
                     onScrollBy: { scroll(.vertical, by: $0) }
                 )
-                // Corner occupied by the window's grow box.
-                Color.clear
+                // Empty platinum corner where the two scroll bars meet.
+                Platinum.face
                     .frame(width: ClassicScrollBar.thickness, height: ClassicScrollBar.thickness)
+                    .overlay(Rectangle().strokeBorder(Platinum.darkShadow, lineWidth: 1))
             }
         }
     }

@@ -279,6 +279,83 @@ struct LocationBar: View {
     }
 }
 
+// MARK: - Status bar
+
+/// The Navigator status bar: status message on the left, loading progress
+/// on the right. The right end is left free for the window's grow box.
+struct StatusBar: View {
+    static let height: CGFloat = 15
+
+    let message: String
+    /// Loading progress from 0 to 1, or `nil` when idle (empty bar).
+    let progress: Double?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(message)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.black)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            ProgressBar(progress: progress)
+                .frame(width: 160, height: 10)
+            // Space for the grow box overlaid by the window.
+            Color.clear
+                .frame(width: ClassicScrollBar.thickness)
+        }
+        .padding(.leading, 6)
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
+        .background(DitherPattern())
+        .bevel(light: Platinum.highlight, dark: Platinum.shadow, inset: 0)
+    }
+}
+
+/// The 50% dithered platinum fill used behind the status bar.
+private struct DitherPattern: View {
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Platinum.face))
+            let dot = GraphicsContext.Shading.color(Color(white: 0.8))
+            var path = Path()
+            for y in stride(from: 0, to: size.height, by: 1) {
+                let start = Int(y) % 2 == 0 ? 0.0 : 1.0
+                for x in stride(from: start, to: size.width, by: 2) {
+                    path.addRect(CGRect(x: x, y: y, width: 1, height: 1))
+                }
+            }
+            context.fill(path, with: dot)
+        }
+    }
+}
+
+/// A sunken Platinum progress bar with a lavender fill.
+private struct ProgressBar: View {
+    let progress: Double?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let fraction = min(max(progress ?? 0, 0), 1)
+            ZStack(alignment: .leading) {
+                Color(white: 0.93)
+                Rectangle()
+                    .fill(Color(red: 0.4, green: 0.4, blue: 0.8))
+                    .overlay(alignment: .top) {
+                        // Highlight line gives the fill a slightly raised look.
+                        Rectangle().fill(Color(red: 0.7, green: 0.7, blue: 1.0)).frame(height: 1)
+                    }
+                    .frame(width: (proxy.size.width - 2) * fraction)
+                    .padding(1)
+            }
+        }
+        .overlay(Rectangle().strokeBorder(Platinum.darkShadow, lineWidth: 1))
+        .padding(1)
+        .bevel(light: Platinum.shadow, dark: Platinum.highlight, inset: 0)
+        .animation(.linear(duration: 0.15), value: progress)
+    }
+}
+
 #Preview("Toolbars") {
     VStack(spacing: 0) {
         ToolbarPane(onCollapse: {}) {
@@ -289,6 +366,7 @@ struct LocationBar: View {
         }
         CollapsedToolbarTray(tabs: [.constant(true), .constant(true)])
         Color.white.frame(height: 40)
+        StatusBar(message: "Document: Done", progress: 0.6)
     }
     .frame(width: 640)
     .environment(\.colorScheme, .light)
