@@ -7,48 +7,60 @@
 
 import SwiftUI
 import AppKit
+import WebKit
 
 struct ContentView: View {
-    @State private var address = "http://"
-    @State private var isLoading = false
+    private static let homeURL = URL(string: "https://en.wikipedia.org/wiki/Netscape_Navigator")!
+
+    @State private var page = WebPage.withClassicScrollBars()
+    @State private var address = ContentView.homeURL.absoluteString
     @State private var isNavigationToolbarCollapsed = false
     @State private var isLocationBarCollapsed = false
 
     var body: some View {
-        ClassicWindow(title: "RetroNavigator") {
+        ClassicWindow(title: page.title.isEmpty ? "RetroNavigator" : page.title) {
             VStack(spacing: 0) {
                 if !isNavigationToolbarCollapsed {
                     ToolbarPane(onCollapse: { collapse($isNavigationToolbarCollapsed) }) {
-                        NavigationToolbar(isLoading: isLoading, onAction: handle)
+                        NavigationToolbar(isLoading: page.isLoading, onAction: handle)
                     }
                 }
                 if !isLocationBarCollapsed {
                     ToolbarPane(onCollapse: { collapse($isLocationBarCollapsed) }) {
-                        LocationBar(address: $address) {
-                            isLoading = true
-                        }
+                        LocationBar(address: $address, onSubmit: loadAddress)
                     }
                 }
                 if !collapsedToolbars.isEmpty {
                     CollapsedToolbarTray(tabs: collapsedToolbars)
                 }
-                VStack {
-                    Image(systemName: "globe")
-                        .imageScale(.large)
-                        .foregroundStyle(.tint)
-                    Text("Hello, world!")
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Platinum.darkShadow).frame(height: 1)
-                }
+                ClassicWebView(page: page)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Platinum.darkShadow).frame(height: 1)
+                    }
             }
             .background(Platinum.face)
         }
         // The Platinum look is light-only; keep text dark in Dark Mode.
         .environment(\.colorScheme, .light)
+        .onAppear {
+            page.load(Self.homeURL)
+        }
+        // Keep the Location field in sync with redirects and clicked links.
+        .onChange(of: page.url) { _, newURL in
+            if let newURL {
+                address = newURL.absoluteString
+            }
+        }
+    }
+
+    /// Loads the typed address, adding a scheme if none was given.
+    private func loadAddress() {
+        let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let withScheme = text.contains("://") ? text : "http://" + text
+        if let url = URL(string: withScheme) {
+            page.load(url)
+        }
     }
 
     /// Bindings of the toolbars currently collapsed into the tray, in order.
@@ -62,14 +74,24 @@ struct ContentView: View {
         }
     }
 
-    /// Placeholder handling until page loading is implemented.
     private func handle(_ action: NavigationToolbar.Action) {
         switch action {
+        case .back:
+            if let item = page.backForwardList.backList.last {
+                page.load(item)
+            }
+        case .forward:
+            if let item = page.backForwardList.forwardList.first {
+                page.load(item)
+            }
         case .reload:
-            isLoading = true
+            page.reload()
+        case .home:
+            page.load(Self.homeURL)
         case .stop:
-            isLoading = false
-        case .back, .forward, .home, .print:
+            page.stopLoading()
+        case .print:
+            // Printing isn't implemented yet.
             break
         }
     }

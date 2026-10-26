@@ -33,7 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "RetroNavigator"
-        window.contentView = NSHostingView(rootView: ContentView())
+        let hostingView = NSHostingView(rootView: ContentView())
+        // Only enforce the minimum size; don't let the web view's ideal size
+        // resize the window.
+        hostingView.sizingOptions = [.minSize]
+        window.contentView = hostingView
         window.hasShadow = true
         window.isReleasedWhenClosed = false
         window.center()
