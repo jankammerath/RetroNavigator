@@ -9,17 +9,68 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+    @State private var address = "http://"
+    @State private var isLoading = false
+    @State private var isNavigationToolbarCollapsed = false
+    @State private var isLocationBarCollapsed = false
+
     var body: some View {
         ClassicWindow(title: "RetroNavigator") {
-            VStack {
-                Image(systemName: "globe")
-                    .imageScale(.large)
-                    .foregroundStyle(.tint)
-                Text("Hello, world!")
+            VStack(spacing: 0) {
+                if !isNavigationToolbarCollapsed {
+                    ToolbarPane(onCollapse: { collapse($isNavigationToolbarCollapsed) }) {
+                        NavigationToolbar(isLoading: isLoading, onAction: handle)
+                    }
+                }
+                if !isLocationBarCollapsed {
+                    ToolbarPane(onCollapse: { collapse($isLocationBarCollapsed) }) {
+                        LocationBar(address: $address) {
+                            isLoading = true
+                        }
+                    }
+                }
+                if !collapsedToolbars.isEmpty {
+                    CollapsedToolbarTray(tabs: collapsedToolbars)
+                }
+                VStack {
+                    Image(systemName: "globe")
+                        .imageScale(.large)
+                        .foregroundStyle(.tint)
+                    Text("Hello, world!")
+                }
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Platinum.darkShadow).frame(height: 1)
+                }
             }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.white)
+            .background(Platinum.face)
+        }
+        // The Platinum look is light-only; keep text dark in Dark Mode.
+        .environment(\.colorScheme, .light)
+    }
+
+    /// Bindings of the toolbars currently collapsed into the tray, in order.
+    private var collapsedToolbars: [Binding<Bool>] {
+        [$isNavigationToolbarCollapsed, $isLocationBarCollapsed].filter(\.wrappedValue)
+    }
+
+    private func collapse(_ isCollapsed: Binding<Bool>) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isCollapsed.wrappedValue = true
+        }
+    }
+
+    /// Placeholder handling until page loading is implemented.
+    private func handle(_ action: NavigationToolbar.Action) {
+        switch action {
+        case .reload:
+            isLoading = true
+        case .stop:
+            isLoading = false
+        case .back, .forward, .home, .print:
+            break
         }
     }
 }
@@ -27,7 +78,7 @@ struct ContentView: View {
 // MARK: - Platinum palette
 
 /// Colors approximating the Mac OS 9 "Platinum" appearance.
-private enum Platinum {
+enum Platinum {
     static let face = Color(white: 0.867)        // #DDDDDD window frame
     static let highlight = Color.white
     static let shadow = Color(white: 0.6)        // #999999
@@ -309,7 +360,7 @@ private struct GrowBox: View {
 
 // MARK: - Bevel
 
-private extension View {
+extension View {
     /// Draws a 1pt bevel: `light` along the top and left edges,
     /// `dark` along the bottom and right edges.
     func bevel(light: Color, dark: Color, inset: CGFloat = 1) -> some View {
