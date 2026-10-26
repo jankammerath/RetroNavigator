@@ -58,12 +58,14 @@ struct ClassicWindow<Content: View>: View {
             titleBar
             if !isCollapsed {
                 content
-                    .overlay(alignment: .bottomTrailing) {
-                        GrowBox(window: window)
-                    }
                     // Inset well around the content area.
                     .overlay(Rectangle().strokeBorder(Platinum.darkShadow, lineWidth: 1))
                     .bevel(light: Platinum.shadow, dark: Platinum.highlight)
+                    // Placed over the well's bottom/right edges so the grow box
+                    // merges seamlessly with the platinum window frame.
+                    .overlay(alignment: .bottomTrailing) {
+                        GrowBox(window: window)
+                    }
                     .padding([.horizontal, .bottom], Platinum.sideBorder - 1)
             }
         }
