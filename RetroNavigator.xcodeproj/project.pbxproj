@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		3D354BB9308FB0E50046043D /* RetroNavigator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RetroNavigator.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D89DE393090A15B00928C49 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -15,6 +16,18 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+			);
+			target = 3D354BB8308FB0E50046043D /* RetroNavigator */;
+		};
+		3D89DE483090A1CF00928C49 /* Exceptions for "Screenshots" folder in "RetroNavigator" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				screenshot1.png,
+				screenshot2.png,
+				screenshot3.png,
+				screenshot4.png,
+				screenshot5.png,
+				screenshot6.png,
 			);
 			target = 3D354BB8308FB0E50046043D /* RetroNavigator */;
 		};
@@ -27,6 +40,14 @@
 				3D89DE2C30900A7700928C49 /* Exceptions for "RetroNavigator" folder in "RetroNavigator" target */,
 			);
 			path = RetroNavigator;
+			sourceTree = "<group>";
+		};
+		3D89DE3B3090A18800928C49 /* Screenshots */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3D89DE483090A1CF00928C49 /* Exceptions for "Screenshots" folder in "RetroNavigator" target */,
+			);
+			path = Screenshots;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +64,8 @@
 		3D354BB0308FB0E50046043D = {
 			isa = PBXGroup;
 			children = (
+				3D89DE3B3090A18800928C49 /* Screenshots */,
+				3D89DE393090A15B00928C49 /* README.md */,
 				3D354BBB308FB0E50046043D /* RetroNavigator */,
 				3D354BBA308FB0E50046043D /* Products */,
 			);
@@ -71,6 +94,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				3D354BBB308FB0E50046043D /* RetroNavigator */,
+				3D89DE3B3090A18800928C49 /* Screenshots */,
 			);
 			name = RetroNavigator;
 			productName = RetroNavigator;
