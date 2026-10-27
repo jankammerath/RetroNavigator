@@ -489,22 +489,3 @@ nonisolated enum ProxyCertificate {
         return SecCertificateCopyData(leaf) as Data == certificateData
     }
 }
-
-// MARK: - Navigation
-
-/// While time travelling, every request goes through the proxy, and https
-/// is answered by its internal TLS endpoint. WebKit is told to trust that
-/// endpoint's certificate, matched exactly and only in Wayback mode.
-struct WaybackNavigationDecider: WebPage.NavigationDeciding {
-    func decideAuthenticationChallengeDisposition(
-        for challenge: URLAuthenticationChallenge
-    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
-        guard BrowserSettings.isWaybackEnabled,
-              challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let trust = challenge.protectionSpace.serverTrust,
-              ProxyCertificate.matches(trust) else {
-            return (.performDefaultHandling, nil)
-        }
-        return (.useCredential, URLCredential(trust: trust))
-    }
-}

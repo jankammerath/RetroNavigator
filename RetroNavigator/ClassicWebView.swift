@@ -44,6 +44,9 @@ struct ClassicWebView: View {
             VStack(spacing: 0) {
                 WebView(page)
                     .scrollIndicators(.hidden)
+                    .webViewContextMenu { element in
+                        contextMenu(for: element)
+                    }
                     .webViewScrollPosition($scrollPosition)
                     .webViewOnScrollGeometryChange(for: ScrollMetrics.self, of: ScrollMetrics.init) { _, newValue in
                         metrics = newValue
@@ -71,6 +74,44 @@ struct ClassicWebView: View {
                     .frame(width: ClassicScrollBar.thickness, height: ClassicScrollBar.thickness)
                     .overlay(Rectangle().strokeBorder(Platinum.darkShadow, lineWidth: 1))
             }
+        }
+    }
+
+    /// A Navigator-style context menu, replacing WebKit's default one.
+    @ViewBuilder
+    private func contextMenu(for element: WebView.ActivatedElementInfo) -> some View {
+        if let link = element.linkURL {
+            Button("Open Link in New Window") {
+                BrowserWindowManager.shared.openWindow(url: link)
+            }
+            Button("Download Link to Disk") {
+                DownloadManager.shared.requestDownload(DownloadRequest(url: link))
+            }
+            Button("Copy Link Location") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(link.absoluteString, forType: .string)
+            }
+            Divider()
+        }
+        Button("Back") {
+            if let item = page.backForwardList.backList.last {
+                page.load(item)
+            }
+        }
+        .disabled(page.backForwardList.backList.isEmpty)
+        Button("Forward") {
+            if let item = page.backForwardList.forwardList.first {
+                page.load(item)
+            }
+        }
+        .disabled(page.backForwardList.forwardList.isEmpty)
+        Button("Reload") {
+            page.reload()
+        }
+        Divider()
+        Button("Copy") {
+            // Copies the selected text from the focused web view.
+            NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
         }
     }
 
@@ -123,7 +164,7 @@ extension WebPage {
         let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(script)
 
-        return WebPage(configuration: configuration, navigationDecider: WaybackNavigationDecider())
+        return WebPage(configuration: configuration, navigationDecider: BrowserNavigationDecider())
     }
 }
 

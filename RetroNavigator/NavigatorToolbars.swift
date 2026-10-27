@@ -298,7 +298,7 @@ struct StatusBar: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
-            ProgressBar(progress: progress)
+            ClassicProgressBar(progress: progress)
                 .frame(width: 160, height: 10)
             // Space for the grow box overlaid by the window.
             Color.clear
@@ -331,7 +331,7 @@ private struct DitherPattern: View {
 }
 
 /// A sunken Platinum progress bar with a lavender fill.
-private struct ProgressBar: View {
+struct ClassicProgressBar: View {
     let progress: Double?
 
     var body: some View {

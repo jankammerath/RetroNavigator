@@ -10,6 +10,9 @@ import AppKit
 import WebKit
 
 struct ContentView: View {
+    /// The page a new window opens with; the home page if `nil`.
+    private let initialURL: URL?
+
     @AppStorage(BrowserSettings.homePageKey) private var homePage = BrowserSettings.defaultHomePage
     @AppStorage(BrowserSettings.waybackEnabledKey) private var isWaybackEnabled = false
     @AppStorage(BrowserSettings.waybackDateKey) private var waybackDate = BrowserSettings.defaultWaybackDate
@@ -18,6 +21,10 @@ struct ContentView: View {
     @State private var address = ""
     @State private var isNavigationToolbarCollapsed = false
     @State private var isLocationBarCollapsed = false
+
+    init(initialURL: URL? = nil) {
+        self.initialURL = initialURL
+    }
 
     var body: some View {
         ClassicWindow(title: page.title.isEmpty ? "RetroNavigator" : page.title) {
@@ -48,8 +55,12 @@ struct ContentView: View {
         .task {
             // Configure the proxy before the first load so the home page
             // already comes from the archive when time travel is on.
-            await applyWaybackSettings()
-            loadHomePage()
+            await applyWaybackSettings(clearingCache: false)
+            if let initialURL {
+                page.load(initialURL)
+            } else {
+                loadHomePage()
+            }
         }
         // Keep the Location field in sync with redirects and clicked links.
         .onChange(of: page.url) { _, newURL in
@@ -66,13 +77,14 @@ struct ContentView: View {
     }
 
     /// Routes WebKit through the Wayback proxy while time travel is enabled.
-    private func applyWaybackSettings() async {
+    private func applyWaybackSettings(clearingCache: Bool = true) async {
         let dataStore = WKWebsiteDataStore.default()
         if isWaybackEnabled, let configuration = try? await WaybackProxy.shared.proxyConfiguration() {
             dataStore.proxyConfigurations = [configuration]
         } else {
             dataStore.proxyConfigurations = []
         }
+        guard clearingCache else { return }
         // Cached pages from the live web or another date must not be reused.
         await dataStore.removeData(
             ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache],
@@ -154,7 +166,8 @@ struct ContentView: View {
     private func printPage() {
         // `WebPage` has no printing API, but WebKit's own print operation
         // paginates properly, so use the WKWebView behind the SwiftUI WebView.
-        guard let window = NSApp.windows.first(where: { $0.contentView?.firstDescendant(of: WKWebView.self) != nil }),
+        // The Print button was clicked in the key window.
+        guard let window = NSApp.keyWindow,
               let webView = window.contentView?.firstDescendant(of: WKWebView.self) else { return }
 
         let printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
