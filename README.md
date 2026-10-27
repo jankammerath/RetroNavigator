@@ -1,6 +1,6 @@
 # RetroNavigator
 
-A Netscape Navigator clone for macOS with support for Wayback Machine and Gopher, packed in the classic MacOS window style.
+A Netscape Navigator clone for macOS with support for Wayback Machine, Gopher and WAP, packed in the classic MacOS window style.
 
 Browse today's web — or travel back to the web of 1999 — in a faithful recreation of Netscape Navigator 4 running in a Mac OS 9 Platinum window.
 
@@ -21,7 +21,7 @@ Browse today's web — or travel back to the web of 1999 — in a faithful recre
 - **Classic scroll bars and status bar** — Platinum scroll bars with the arrows together at the bottom, and a status bar with loading progress ("Connect: Contacting host…", "Document: Done").
 - **Wayback Machine time travel** — pick any date since 1996 and browse the web as it was on that day, served straight from [archive.org](https://web.archive.org) without the archive's banner.
 - **Gopher support** — open `gopher://` addresses with Navigator-style menus, text documents and searchable indexes.
-- **WAP support** — open a WAP pages like `wap.yahoo.de` or `wap.web.de` from 2001-2005 to view mobile WAP pages
+- **WAP support** — open mobile WAP pages like `wap.yahoo.de` or `wap.web.de` from 2001–2005 on an emulated phone screen, with WML, WMLScript and WBMP images.
 - **Vintage preferences dialog** — set your home page and the time travel date in a Mac OS 9 style movable modal dialog.
 
 ## Download and install
@@ -73,6 +73,25 @@ Enter a Gopher address such as `gopher://gopher.floodgap.com/` in the Location f
 
 ![The Floodgap Gopher server](/Screenshots/screenshot6.png)
 
+### WAP pages
+
+Before smartphones, mobile phones browsed the "mobile internet" with WAP: pages written in WML, small black-and-white WBMP images and WMLScript. Almost all WAP sites are gone, so the best way to visit them is through time travel:
+
+1. Turn on time travel in **Settings…** (⌘,) and choose a date between 2000 and 2005.
+2. Open a WAP address such as `wap.web.de` or `wap.yahoo.de`.
+
+RetroNavigator recognizes WAP content and shows it on an emulated phone screen with a monochrome LCD, the card title at the top and softkeys at the bottom.
+
+![WEB.DE's WAP portal in 2001](/Screenshots/screenshot7.png)
+
+What's supported:
+
+- **WML decks** — one card at a time with links between cards, timers, `onenterforward`/`onenterbackward`/`ontimer` events, `<do>` softkeys (including deck templates), `<go>`, `<prev>`, `<refresh>` and `<setvar>`, WML variables, input fields, selection lists, tables and text formatting.
+- **WBMP images** — decoded and shown in black on the LCD, like on a real phone.
+- **WMLScript** — scripts called from WML links (`script.wmls#function()`) run with the standard Lang, Float, String, URL, WMLBrowser and Dialogs libraries. Dialogs appear as classic Mac OS alerts.
+
+Compiled WAP content (binary WMLC and compiled WMLScript), which phones received from WAP gateways, isn't supported. Archived sites usually store the text versions, which work.
+
 ### Home page
 
 Set your home page in **Settings…** (⌘,). The Home button and every new launch open it. **Restore Default** brings back the original home page.
@@ -98,7 +117,7 @@ Set your home page in **Settings…** (⌘,). The Home button and every new laun
 *Browsing Gopherspace on gopher.floodgap.com.*
 
 ![WAP page rendering](/Screenshots/screenshot7.png)
-*Rendering and emulation of WAP pages.*
+*WEB.DE's WAP portal in 2001, shown on the emulated phone screen.*
 
 ## How time travel works
 
