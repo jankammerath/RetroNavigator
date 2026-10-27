@@ -6,9 +6,14 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3D89DE4A3090A2C200928C49 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 3D89DE493090A2C000928C49 /* LICENSE */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		3D354BB9308FB0E50046043D /* RetroNavigator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RetroNavigator.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D89DE393090A15B00928C49 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		3D89DE493090A2C000928C49 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -64,6 +69,7 @@
 		3D354BB0308FB0E50046043D = {
 			isa = PBXGroup;
 			children = (
+				3D89DE493090A2C000928C49 /* LICENSE */,
 				3D89DE3B3090A18800928C49 /* Screenshots */,
 				3D89DE393090A15B00928C49 /* README.md */,
 				3D354BBB308FB0E50046043D /* RetroNavigator */,
@@ -139,6 +145,7 @@
 		3D354BB7308FB0E50046043D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				3D89DE4A3090A2C200928C49 /* LICENSE in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
