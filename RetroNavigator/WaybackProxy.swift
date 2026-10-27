@@ -14,6 +14,7 @@
 
 import Foundation
 import Network
+import Synchronization
 import WebKit
 
 nonisolated final class WaybackProxy: @unchecked Sendable {
@@ -23,6 +24,19 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
     private let session: URLSession
     private var listener: NWListener?
     private var port: UInt16?
+
+    /// Redirect bookkeeping shared by concurrently handled connections.
+    private struct RedirectState {
+        /// The configured timestamp the hints below belong to.
+        var baseTimestamp = ""
+        /// Capture timestamps to use for URLs an archived redirect pointed
+        /// to, keyed by `resourceKey(_:)`.
+        var timestampHints: [String: String] = [:]
+        /// When each URL was last redirected, for loop detection.
+        var recentRedirects: [String: [Date]] = [:]
+    }
+
+    private let redirectState = Mutex(RedirectState())
 
     private init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -145,8 +159,52 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
         // for the date directly makes the Wayback Machine redirect to the
         // closest snapshot, which is followed below. That saves one round
         // trip for every page, image and stylesheet.
-        let target = "https://web.archive.org/web/\(BrowserSettings.waybackTimestamp)id_/\(url)"
+        let target = "https://web.archive.org/web/\(timestamp(for: url))id_/\(url)"
         return await request(target, originalURL: url, redirectsLeft: 8)
+    }
+
+    /// The timestamp to request `url` at: the time of the capture that
+    /// redirected to it, if any, otherwise the configured date.
+    private func timestamp(for url: String) -> String {
+        let configured = BrowserSettings.waybackTimestamp
+        return redirectState.withLock { state in
+            if state.baseTimestamp != configured {
+                // The date was changed in the settings: start over.
+                state = RedirectState(baseTimestamp: configured)
+            }
+            return state.timestampHints[Self.resourceKey(url)] ?? configured
+        }
+    }
+
+    /// Records a redirect passed to the browser. Returns `false` if `source`
+    /// keeps being redirected, i.e. the browser is stuck in a loop.
+    private func recordRedirect(from source: String, to destination: String, captureTimestamp: String?) -> Bool {
+        let now = Date.now
+        return redirectState.withLock { state in
+            let key = Self.resourceKey(source)
+            let recent = (state.recentRedirects[key] ?? []).filter { now.timeIntervalSince($0) < 30 }
+            state.recentRedirects[key] = recent + [now]
+            // Captures far from the chosen date (e.g. a session URL only
+            // archived ten years later) would drag the rest of the chain to
+            // that time, so their timestamps aren't carried over.
+            if let captureTimestamp,
+               Self.monthsBetween(captureTimestamp, state.baseTimestamp) <= 12 {
+                state.timestampHints[Self.resourceKey(destination)] = captureTimestamp
+            }
+            return recent.count < 3
+        }
+    }
+
+    /// Approximate distance in months between two Wayback timestamps.
+    private static func monthsBetween(_ lhs: String, _ rhs: String) -> Int {
+        func months(_ timestamp: String) -> Int? {
+            guard timestamp.count >= 6,
+                  let year = Int(timestamp.prefix(4)),
+                  let month = Int(timestamp.dropFirst(4).prefix(2)) else { return nil }
+            return year * 12 + month
+        }
+        guard let a = months(lhs), let b = months(rhs) else { return .max }
+        return abs(a - b)
     }
 
     private func request(_ target: String, originalURL: String, redirectsLeft: Int) async -> ProxyResponse {
@@ -177,7 +235,16 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
                 }
                 // A redirect the archived site itself made: pass it to the
                 // browser with the original URL, kept on plain http.
-                return .redirect(status: http.statusCode == 301 ? 301 : 302, location: Self.downgradedToHTTP(destination))
+                //
+                // The destination must then be fetched at the time of this
+                // capture, as the Wayback Machine's own viewer does. Resolving
+                // it against the configured date can pick captures from other
+                // times whose redirects form a cycle (e.g. amazon.com in 2001).
+                let browserLocation = Self.downgradedToHTTP(destination)
+                guard recordRedirect(from: originalURL, to: browserLocation, captureTimestamp: Self.timestamp(from: resolved)) else {
+                    return .redirectLoop(originalURL)
+                }
+                return .redirect(status: http.statusCode == 301 ? 301 : 302, location: browserLocation)
 
             case 404:
                 return .notFound(originalURL)
@@ -198,21 +265,33 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
         return String(rest[rest.index(after: slash)...])
     }
 
-    /// Compares URLs ignoring the scheme, a leading "www." and a trailing
-    /// slash, as the Wayback Machine switches between them when redirecting
-    /// to the closest capture (e.g. www.apple.com → apple.com).
+    /// Extracts the capture timestamp (digits only) from
+    /// `https://web.archive.org/web/20010901123456id_/<url>`.
+    private static func timestamp(from waybackURL: String) -> String? {
+        guard let range = waybackURL.range(of: "web.archive.org/web/") else { return nil }
+        let digits = waybackURL[range.upperBound...].prefix { $0.isNumber }
+        return digits.isEmpty ? nil : String(digits)
+    }
+
+    /// Compares URLs ignoring the scheme, a leading "www.", the default port
+    /// and a trailing slash, as the Wayback Machine switches between them
+    /// when redirecting to the closest capture (e.g. www.apple.com → apple.com).
     private static func isSameResource(_ lhs: String, _ rhs: String) -> Bool {
-        func normalized(_ url: String) -> String {
-            var result = url
-            for prefix in ["https://", "http://", "www."] where result.hasPrefix(prefix) {
-                result.removeFirst(prefix.count)
-            }
-            if result.hasSuffix("/") {
-                result.removeLast()
-            }
-            return result.lowercased()
+        resourceKey(lhs) == resourceKey(rhs)
+    }
+
+    private static func resourceKey(_ url: String) -> String {
+        var result = url
+        for prefix in ["https://", "http://", "www."] where result.hasPrefix(prefix) {
+            result.removeFirst(prefix.count)
         }
-        return normalized(lhs) == normalized(rhs)
+        if let port = result.range(of: ":80/") {
+            result.replaceSubrange(port, with: "/")
+        }
+        if result.hasSuffix("/") {
+            result.removeLast()
+        }
+        return result.lowercased()
     }
 
     private static func downgradedToHTTP(_ url: String) -> String {
@@ -267,6 +346,10 @@ private nonisolated struct ProxyResponse {
 
     static func notFound(_ url: String) -> ProxyResponse {
         errorPage(status: 404, reason: "Not Found", message: "The Wayback Machine has no copy of this content:<br><b>\(url)</b>")
+    }
+
+    static func redirectLoop(_ url: String) -> ProxyResponse {
+        errorPage(status: 508, reason: "Loop Detected", message: "The archived copies of this page keep redirecting to each other:<br><b>\(url)</b><br>Try a different date in the settings.")
     }
 
     static func badGateway(_ text: String) -> ProxyResponse {
