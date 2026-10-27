@@ -96,6 +96,9 @@ Set your home page in **Settings…** (⌘,). The Home button and every new laun
 ![Floodgap Gopher menu](/Screenshots/screenshot6.png)
 *Browsing Gopherspace on gopher.floodgap.com.*
 
+![WAP page rendering](/Screenshots/screenshot7.png)
+*Rendering and emulation of WAP pages.*
+
 ## How time travel works
 
 RetroNavigator contains a small built-in HTTP proxy, ported from [HttpTimeTravelProxy](https://github.com/jankammerath/HttpTimeTravelProxy). While time travel is enabled, the browser sends all of its requests to this proxy on your Mac (`127.0.0.1`), which fetches the closest archived copy from the Wayback Machine using its raw `id_` mode. Pages arrive exactly as they were archived, without the Wayback Machine's banner or rewritten links.
