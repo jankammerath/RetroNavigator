@@ -297,7 +297,8 @@ struct ClassicWindow<Content: View>: View {
         Canvas { context, size in
             guard appearsActive else { return }
             let grooves = 6
-            let top = ((size.height - CGFloat(grooves * 2)) / 2).rounded()
+            // Shifted down 1pt to line up optically with the title and boxes.
+            let top = ((size.height - CGFloat(grooves * 2)) / 2).rounded() + 1
             for index in 0..<grooves {
                 let y = top + CGFloat(index * 2)
                 context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)),
