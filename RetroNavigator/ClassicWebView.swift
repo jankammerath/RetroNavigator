@@ -17,7 +17,7 @@ struct ClassicWebView: View {
 
     /// The parts of `ScrollGeometry` the scroll bars need, in a `Hashable`
     /// form as required by `webViewOnScrollGeometryChange`.
-    private struct ScrollMetrics: Hashable {
+    private nonisolated struct ScrollMetrics: Hashable {
         var offsetX: CGFloat
         var offsetY: CGFloat
         var contentWidth: CGFloat
@@ -106,6 +106,9 @@ extension WebPage {
         // Silent http → https upgrades would bypass the Wayback proxy, which
         // only serves plain http. Live sites still redirect to https themselves.
         configuration.upgradeKnownHostsToHTTPS = false
+        if let gopher = URLScheme("gopher") {
+            configuration.urlSchemeHandlers[gopher] = GopherSchemeHandler()
+        }
         let css = """
         html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
         html { scrollbar-width: none; }
