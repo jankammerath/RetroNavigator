@@ -22,8 +22,9 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "RetroNavigator.WaybackProxy")
     private let session: URLSession
-    private var listener: NWListener?
+    private var listeners: [NWListener] = []
     private var port: UInt16?
+    private var tlsPort: UInt16?
 
     /// Redirect bookkeeping shared by concurrently handled connections.
     private struct RedirectState {
@@ -56,12 +57,39 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
         if let port {
             return port
         }
-        let parameters = NWParameters.tcp
+
+        // Internal TLS endpoint that https tunnels are relayed to. It presents
+        // the bundled self-signed certificate, which WebKit accepts while
+        // time travelling (see `WaybackNavigationDecider`).
+        guard let identity = ProxyCertificate.identity,
+              let secIdentity = sec_identity_create(identity) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_local_identity(tlsOptions.securityProtocolOptions, secIdentity)
+        // The proxy is an app-lifetime singleton, so capturing it is fine.
+        let tlsListener = try await startListener(using: NWParameters(tls: tlsOptions)) { connection in
+            self.serve(connection) { await self.handleDecrypted($0) }
+        }
+        tlsPort = tlsListener.port
+
+        // The proxy WebKit talks to.
+        let listener = try await startListener(using: .tcp) { connection in
+            self.serve(connection) { await self.handle($0) }
+        }
+        listeners = [listener.listener, tlsListener.listener]
+        port = listener.port
+        return listener.port
+    }
+
+    /// Starts a listener on a free localhost port and waits until it's ready.
+    private func startListener(
+        using parameters: NWParameters,
+        onConnection: @escaping @Sendable (NWConnection) -> Void
+    ) async throws -> (listener: NWListener, port: UInt16) {
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         let listener = try NWListener(using: parameters)
-        listener.newConnectionHandler = { [weak self] connection in
-            self?.serve(connection)
-        }
+        listener.newConnectionHandler = onConnection
 
         let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
             // Only touched from the listener's serial queue.
@@ -81,17 +109,15 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
             }
             listener.start(queue: queue)
         }
-        self.listener = listener
-        self.port = port
-        return port
+        return (listener, port)
     }
 
     // MARK: Connection handling
 
-    private func serve(_ connection: NWConnection) {
+    private func serve(_ connection: NWConnection, with handler: @escaping @Sendable (NWConnection) async -> Void) {
         connection.start(queue: queue)
         Task {
-            await handle(connection)
+            await handler(connection)
             connection.cancel()
         }
     }
@@ -99,25 +125,55 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
     private func handle(_ connection: NWConnection) async {
         guard var request = await readRequest(from: connection) else { return }
 
-        // WebKit tunnels requests through the proxy with CONNECT. Plain HTTP
-        // inside the tunnel can be served; TLS can't be decrypted.
+        // WebKit tunnels every request through the proxy with CONNECT.
         if request.method == "CONNECT" {
-            guard !request.target.hasSuffix(":443") else {
-                await send(.badGateway("Secure (https) connections are not available while browsing the Wayback Machine."), to: connection)
+            await send(Data("HTTP/1.1 200 Connection Established\r\n\r\n".utf8), to: connection)
+            guard request.target.hasSuffix(":80") else {
+                // https (often forced by HSTS): relay the encrypted stream to
+                // the internal TLS endpoint, which serves it decrypted.
+                await relayToTLSEndpoint(connection)
                 return
             }
-            await send(Data("HTTP/1.1 200 Connection Established\r\n\r\n".utf8), to: connection)
             guard let tunnelled = await readRequest(from: connection) else { return }
             request = tunnelled
         }
+        await respond(to: request, scheme: "http", on: connection)
+    }
 
+    /// Serves a request that arrived through the internal TLS endpoint.
+    private func handleDecrypted(_ connection: NWConnection) async {
+        guard let request = await readRequest(from: connection) else { return }
+        await respond(to: request, scheme: "https", on: connection)
+    }
+
+    private func respond(to request: ProxyRequest, scheme: String, on connection: NWConnection) async {
         // Like the original proxy, only GET is supported: the archive holds
         // no dynamic content.
-        guard request.method == "GET", let url = request.url else {
+        guard request.method == "GET", let url = request.url(scheme: scheme) else {
             await send(.badRequest, to: connection)
             return
         }
         await send(await fetchFromArchive(url), to: connection)
+    }
+
+    private func relayToTLSEndpoint(_ connection: NWConnection) async {
+        guard let tlsPort, let port = NWEndpoint.Port(rawValue: tlsPort) else { return }
+        let inner = NWConnection(host: .ipv4(.loopback), port: port, using: .tcp)
+        inner.start(queue: queue)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.pump(from: connection, to: inner) }
+            group.addTask { await self.pump(from: inner, to: connection) }
+            // When one side closes, close both so the other pump finishes too.
+            await group.next()
+            connection.cancel()
+            inner.cancel()
+        }
+    }
+
+    private func pump(from source: NWConnection, to destination: NWConnection) async {
+        while let data = await receive(from: source) {
+            await send(data, to: destination)
+        }
     }
 
     private func readRequest(from connection: NWConnection) async -> ProxyRequest? {
@@ -234,17 +290,16 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
                     return await request(resolved, originalURL: originalURL, redirectsLeft: redirectsLeft - 1)
                 }
                 // A redirect the archived site itself made: pass it to the
-                // browser with the original URL, kept on plain http.
+                // browser with the original URL.
                 //
                 // The destination must then be fetched at the time of this
                 // capture, as the Wayback Machine's own viewer does. Resolving
                 // it against the configured date can pick captures from other
                 // times whose redirects form a cycle (e.g. amazon.com in 2001).
-                let browserLocation = Self.downgradedToHTTP(destination)
-                guard recordRedirect(from: originalURL, to: browserLocation, captureTimestamp: Self.timestamp(from: resolved)) else {
+                guard recordRedirect(from: originalURL, to: destination, captureTimestamp: Self.timestamp(from: resolved)) else {
                     return .redirectLoop(originalURL)
                 }
-                return .redirect(status: http.statusCode == 301 ? 301 : 302, location: browserLocation)
+                return .redirect(status: http.statusCode == 301 ? 301 : 302, location: destination)
 
             case 404:
                 return .notFound(originalURL)
@@ -285,17 +340,15 @@ nonisolated final class WaybackProxy: @unchecked Sendable {
         for prefix in ["https://", "http://", "www."] where result.hasPrefix(prefix) {
             result.removeFirst(prefix.count)
         }
-        if let port = result.range(of: ":80/") {
-            result.replaceSubrange(port, with: "/")
+        for port in [":80/", ":443/"] {
+            if let range = result.range(of: port) {
+                result.replaceSubrange(range, with: "/")
+            }
         }
         if result.hasSuffix("/") {
             result.removeLast()
         }
         return result.lowercased()
-    }
-
-    private static func downgradedToHTTP(_ url: String) -> String {
-        url.hasPrefix("https://") ? "http://" + url.dropFirst("https://".count) : url
     }
 }
 
@@ -320,13 +373,17 @@ private nonisolated struct ProxyRequest {
     }
 
     /// The full URL: requests sent straight to a proxy carry an absolute URL,
-    /// requests inside a CONNECT tunnel only a path plus the Host header.
-    var url: String? {
-        if target.lowercased().hasPrefix("http://") {
+    /// requests inside a tunnel only a path plus the Host header.
+    func url(scheme: String) -> String? {
+        let lowercased = target.lowercased()
+        if lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://") {
             return target
         }
-        guard let host, target.hasPrefix("/") else { return nil }
-        return "http://\(host)\(target)"
+        guard var host, target.hasPrefix("/") else { return nil }
+        if host.hasSuffix(":443") || host.hasSuffix(":80") {
+            host = String(host[..<(host.lastIndex(of: ":") ?? host.endIndex)])
+        }
+        return "\(scheme)://\(host)\(target)"
     }
 }
 
@@ -398,28 +455,56 @@ private nonisolated final class NoRedirectDelegate: NSObject, URLSessionTaskDele
     }
 }
 
+// MARK: - Certificate
+
+/// The self-signed certificate the proxy's internal TLS endpoint presents
+/// for https requests (bundled as `WaybackProxy.p12`).
+nonisolated enum ProxyCertificate {
+    static let identity: SecIdentity? = {
+        guard let url = Bundle.main.url(forResource: "WaybackProxy", withExtension: "p12"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        var items: CFArray?
+        let options = [kSecImportExportPassphrase as String: "RetroNavigator"] as CFDictionary
+        guard SecPKCS12Import(data as CFData, options, &items) == errSecSuccess,
+              let first = (items as? [[String: Any]])?.first,
+              let identity = first[kSecImportItemIdentity as String] else { return nil }
+        return (identity as! SecIdentity)
+    }()
+
+    /// The DER-encoded certificate, used to recognise it exactly.
+    static let certificateData: Data? = {
+        guard let identity else { return nil }
+        var certificate: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess,
+              let certificate else { return nil }
+        return SecCertificateCopyData(certificate) as Data
+    }()
+
+    /// Whether a server trust presents exactly the proxy's certificate.
+    static func matches(_ trust: SecTrust) -> Bool {
+        guard let certificateData,
+              let leaf = (SecTrustCopyCertificateChain(trust) as? [SecCertificate])?.first else {
+            return false
+        }
+        return SecCertificateCopyData(leaf) as Data == certificateData
+    }
+}
+
 // MARK: - Navigation
 
-/// While time travelling, top-level https navigations are re-issued over
-/// http: the proxy can't decrypt TLS, and old sites were archived over http.
-final class WaybackNavigationDecider: WebPage.NavigationDeciding {
-    weak var page: WebPage?
-
-    func decidePolicy(
-        for action: WebPage.NavigationAction,
-        preferences: inout WebPage.NavigationPreferences
-    ) async -> WKNavigationActionPolicy {
+/// While time travelling, every request goes through the proxy, and https
+/// is answered by its internal TLS endpoint. WebKit is told to trust that
+/// endpoint's certificate, matched exactly and only in Wayback mode.
+struct WaybackNavigationDecider: WebPage.NavigationDeciding {
+    func decideAuthenticationChallengeDisposition(
+        for challenge: URLAuthenticationChallenge
+    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
         guard BrowserSettings.isWaybackEnabled,
-              action.target?.isMainFrame != false,
-              let url = action.request.url,
-              url.scheme == "https",
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return .allow
+              challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust,
+              ProxyCertificate.matches(trust) else {
+            return (.performDefaultHandling, nil)
         }
-        components.scheme = "http"
-        if let httpURL = components.url {
-            Task { page?.load(httpURL) }
-        }
-        return .cancel
+        return (.useCredential, URLCredential(trust: trust))
     }
 }

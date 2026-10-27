@@ -120,10 +120,7 @@ extension WebPage {
         let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(script)
 
-        let decider = WaybackNavigationDecider()
-        let page = WebPage(configuration: configuration, navigationDecider: decider)
-        decider.page = page
-        return page
+        return WebPage(configuration: configuration, navigationDecider: WaybackNavigationDecider())
     }
 }
 
