@@ -53,44 +53,75 @@ enum BrowserSettings {
 
 // MARK: - Settings window
 
+/// Edits a draft of the preferences; nothing is saved until Apply.
 struct SettingsView: View {
     @AppStorage(BrowserSettings.homePageKey) private var homePage = BrowserSettings.defaultHomePage
     @AppStorage(BrowserSettings.waybackEnabledKey) private var isWaybackEnabled = false
     @AppStorage(BrowserSettings.waybackDateKey) private var waybackDate = BrowserSettings.defaultWaybackDate
 
+    @State private var draftHomePage = ""
+    @State private var draftIsWaybackEnabled = false
+    @State private var draftWaybackDate = Date.now
+
     var body: some View {
-        Form {
-            Section("Home Page") {
-                TextField("Location:", text: $homePage)
-                Button("Restore Default") {
-                    homePage = BrowserSettings.defaultHomePage
+        VStack(spacing: 0) {
+            Form {
+                Section("Home Page") {
+                    TextField("Location:", text: $draftHomePage)
+                    Button("Restore Default") {
+                        draftHomePage = BrowserSettings.defaultHomePage
+                    }
+                }
+
+                Section("Wayback Machine") {
+                    Toggle("Browse the web as it was on a past date", isOn: $draftIsWaybackEnabled)
+                    DatePicker(
+                        "Date:",
+                        selection: $draftWaybackDate,
+                        in: BrowserSettings.earliestWaybackDate...Date.now,
+                        displayedComponents: .date
+                    )
+                    .disabled(!draftIsWaybackEnabled)
+                    Text("Pages are loaded from archive.org's Wayback Machine through a built-in proxy, without the archive's banner. Secure (https) addresses are visited over http, as they were archived.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
 
-            Section("Wayback Machine") {
-                Toggle("Browse the web as it was on a past date", isOn: $isWaybackEnabled)
-                DatePicker(
-                    "Date:",
-                    selection: dateBinding,
-                    in: BrowserSettings.earliestWaybackDate...Date.now,
-                    displayedComponents: .date
-                )
-                .disabled(!isWaybackEnabled)
-                Text("Pages are loaded from archive.org's Wayback Machine through a built-in proxy, without the archive's banner. Secure (https) addresses are visited over http, as they were archived.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel", action: closeWindow)
+                    .keyboardShortcut(.cancelAction)
+                Button("Apply", action: apply)
+                    .keyboardShortcut(.defaultAction)
             }
+            .padding([.horizontal, .bottom], 20)
         }
-        .formStyle(.grouped)
         .frame(width: 460)
+        .fixedSize(horizontal: false, vertical: true)
+        // Start from the saved values each time the window opens.
+        .onAppear(perform: loadDraft)
     }
 
-    /// The date is stored as a `Double` so `@AppStorage` can persist it.
-    private var dateBinding: Binding<Date> {
-        Binding(
-            get: { Date(timeIntervalSinceReferenceDate: waybackDate) },
-            set: { waybackDate = $0.timeIntervalSinceReferenceDate }
-        )
+    private func loadDraft() {
+        draftHomePage = homePage
+        draftIsWaybackEnabled = isWaybackEnabled
+        draftWaybackDate = Date(timeIntervalSinceReferenceDate: waybackDate)
+    }
+
+    /// Saves the draft; the browser picks up the changes from `UserDefaults`.
+    private func apply() {
+        homePage = draftHomePage
+        isWaybackEnabled = draftIsWaybackEnabled
+        // The date is stored as a `Double` so `@AppStorage` can persist it.
+        waybackDate = draftWaybackDate.timeIntervalSinceReferenceDate
+        closeWindow()
+    }
+
+    private func closeWindow() {
+        NSApplication.shared.keyWindow?.close()
     }
 }
 
