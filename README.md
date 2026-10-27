@@ -21,6 +21,7 @@ Browse today's web — or travel back to the web of 1999 — in a faithful recre
 - **Classic scroll bars and status bar** — Platinum scroll bars with the arrows together at the bottom, and a status bar with loading progress ("Connect: Contacting host…", "Document: Done").
 - **Wayback Machine time travel** — pick any date since 1996 and browse the web as it was on that day, served straight from [archive.org](https://web.archive.org) without the archive's banner.
 - **Gopher support** — open `gopher://` addresses with Navigator-style menus, text documents and searchable indexes.
+- **WAP support** — open a WAP pages like `wap.yahoo.de` or `wap.web.de` from 2001-2005 to view mobile WAP pages
 - **Vintage preferences dialog** — set your home page and the time travel date in a Mac OS 9 style movable modal dialog.
 
 ## Download and install
