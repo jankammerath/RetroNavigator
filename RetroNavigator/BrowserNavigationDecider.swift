@@ -9,7 +9,10 @@
 import Foundation
 import WebKit
 
-struct BrowserNavigationDecider: WebPage.NavigationDeciding {
+final class BrowserNavigationDecider: WebPage.NavigationDeciding {
+    /// The page this decider belongs to, for showing converted WAP content.
+    weak var page: WebPage?
+
     func decidePolicy(
         for action: WebPage.NavigationAction,
         preferences: inout WebPage.NavigationPreferences
@@ -31,6 +34,18 @@ struct BrowserNavigationDecider: WebPage.NavigationDeciding {
 
     func decidePolicy(for response: WebPage.NavigationResponse) async -> WKNavigationResponsePolicy {
         let urlResponse = response.response
+
+        // WAP content (WML, WBMP, WMLScript) is converted to HTML and shown
+        // under its own URL, keeping history and the Location field intact.
+        if let url = urlResponse.url, WAPRenderer.kind(mimeType: urlResponse.mimeType, url: url) != nil {
+            let page = self.page
+            Task {
+                let html = await WAPRenderer.render(url: url)
+                page?.load(simulatedRequest: URLRequest(url: url), responseHTML: html)
+            }
+            return .cancel
+        }
+
         let disposition = (urlResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
         let isAttachment = disposition.lowercased().hasPrefix("attachment")
 

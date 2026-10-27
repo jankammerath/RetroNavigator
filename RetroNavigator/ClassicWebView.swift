@@ -164,7 +164,10 @@ extension WebPage {
         let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(script)
 
-        return WebPage(configuration: configuration, navigationDecider: BrowserNavigationDecider())
+        let decider = BrowserNavigationDecider()
+        let page = WebPage(configuration: configuration, navigationDecider: decider, dialogPresenter: BrowserDialogPresenter())
+        decider.page = page
+        return page
     }
 }
 
