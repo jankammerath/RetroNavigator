@@ -145,9 +145,44 @@ struct ContentView: View {
         case .stop:
             page.stopLoading()
         case .print:
-            // Printing isn't implemented yet.
-            break
+            printPage()
         }
+    }
+
+    /// Shows the standard print panel for the current page as a sheet on the
+    /// browser window.
+    private func printPage() {
+        // `WebPage` has no printing API, but WebKit's own print operation
+        // paginates properly, so use the WKWebView behind the SwiftUI WebView.
+        guard let window = NSApp.windows.first(where: { $0.contentView?.firstDescendant(of: WKWebView.self) != nil }),
+              let webView = window.contentView?.firstDescendant(of: WKWebView.self) else { return }
+
+        let printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo()
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .automatic
+        printInfo.isHorizontallyCentered = false
+        printInfo.isVerticallyCentered = false
+        printInfo.jobDisposition = .spool
+
+        let operation = webView.printOperation(with: printInfo)
+        operation.jobTitle = page.title.isEmpty ? (page.url?.absoluteString ?? "Untitled") : page.title
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        // Without a frame the operation's view prints blank pages.
+        operation.view?.frame = webView.bounds
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
+}
+
+private extension NSView {
+    /// The first view of the given type in this view's subtree.
+    func firstDescendant<T: NSView>(of type: T.Type) -> T? {
+        for subview in subviews {
+            if let match = subview as? T ?? subview.firstDescendant(of: type) {
+                return match
+            }
+        }
+        return nil
     }
 }
 
