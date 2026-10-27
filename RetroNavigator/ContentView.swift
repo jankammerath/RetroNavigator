@@ -172,6 +172,9 @@ enum Platinum {
 /// collapse (window shade) boxes.
 struct ClassicWindow<Content: View>: View {
     let title: String
+    /// Movable modal dialog style: no title bar boxes, no grow box, and the
+    /// content sits directly on the platinum face.
+    var isDialog = false
     @ViewBuilder var content: Content
 
     @Environment(\.appearsActive) private var appearsActive
@@ -183,7 +186,9 @@ struct ClassicWindow<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             titleBar
-            if !isCollapsed {
+            if isDialog {
+                content
+            } else if !isCollapsed {
                 content
                     // 1px outline around the content area. Scroll bars and the
                     // status bar share this edge, so there's no inner bevel.
@@ -207,7 +212,7 @@ struct ClassicWindow<Content: View>: View {
 
     private var titleBar: some View {
         HStack(spacing: 0) {
-            if appearsActive {
+            if appearsActive && !isDialog {
                 ClassicBoxButton(glyph: .close, action: close)
                     .titleBarBoxWell()
             }
@@ -220,7 +225,7 @@ struct ClassicWindow<Content: View>: View {
                         .padding(.horizontal, 6)
                         .background(Platinum.face)
                 }
-            if appearsActive {
+            if appearsActive && !isDialog {
                 ClassicBoxButton(glyph: .zoom, action: zoom)
                     .titleBarBoxWell()
                 ClassicBoxButton(glyph: .collapse, action: toggleCollapse)
@@ -232,7 +237,11 @@ struct ClassicWindow<Content: View>: View {
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .gesture(WindowDragGesture())
-        .onTapGesture(count: 2, perform: toggleCollapse)
+        .onTapGesture(count: 2) {
+            if !isDialog {
+                toggleCollapse()
+            }
+        }
     }
 
     /// Horizontal embossed pinstripes, only drawn while the window is active.
