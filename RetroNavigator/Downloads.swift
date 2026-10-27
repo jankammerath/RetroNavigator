@@ -39,15 +39,41 @@ final class DownloadManager {
     /// Asks whether to save the file, then downloads it.
     func requestDownload(_ request: DownloadRequest) {
         ClassicDialog.present(title: "Save File") { close in
-            DownloadConfirmView(request: request, onCancel: close) {
-                close()
-                self.start(request)
+            DownloadConfirmView(
+                request: request,
+                onCancel: close,
+                onSave: {
+                    close()
+                    self.start(request, destination: Self.uniqueDestination(for: request.filename))
+                },
+                onSaveAs: {
+                    self.chooseDestination(for: request) { destination in
+                        close()
+                        self.start(request, destination: destination)
+                    }
+                }
+            )
+        }
+    }
+
+    /// Lets the user pick where to save the file. The save panel also grants
+    /// the sandboxed app access to the chosen location.
+    private func chooseDestination(for request: DownloadRequest, completion: @escaping (URL) -> Void) {
+        let panel = NSSavePanel()
+        panel.title = "Save File"
+        panel.nameFieldStringValue = request.filename
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            // If the panel is cancelled, the Save File dialog stays open.
+            if response == .OK, let url = panel.url {
+                completion(url)
             }
         }
     }
 
-    private func start(_ request: DownloadRequest) {
-        let item = DownloadItem(request: request, destination: Self.uniqueDestination(for: request.filename))
+    private func start(_ request: DownloadRequest, destination: URL) {
+        let item = DownloadItem(request: request, destination: destination)
         items.append(item)
         ClassicDialog.present(title: "Saving File") { close in
             DownloadProgressView(item: item) {
@@ -245,6 +271,10 @@ private nonisolated final class DownloadDelegate: NSObject, URLSessionDownloadDe
         }
         // The temporary file is deleted when this method returns, so move it now.
         do {
+            // The save panel already confirmed replacing an existing file.
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
             try FileManager.default.moveItem(at: location, to: destination)
         } catch {
             failure = error.localizedDescription
@@ -266,6 +296,7 @@ struct DownloadConfirmView: View {
     let request: DownloadRequest
     let onCancel: () -> Void
     let onSave: () -> Void
+    let onSaveAs: () -> Void
 
     var body: some View {
         ClassicWindow(title: "Save File", isDialog: true) {
@@ -282,7 +313,7 @@ struct DownloadConfirmView: View {
                             .truncationMode(.middle)
                         Text(details)
                             .foregroundStyle(Platinum.darkShadow)
-                        Text("It will be saved to your Downloads folder.")
+                        Text("It will be saved to your Downloads folder. Choose Save As… to save it elsewhere.")
                             .padding(.top, 4)
                     }
                     .font(dialogFont)
@@ -291,6 +322,8 @@ struct DownloadConfirmView: View {
                 }
 
                 HStack(spacing: 12) {
+                    Button("Save As…", action: onSaveAs)
+                        .buttonStyle(ClassicPushButtonStyle())
                     Spacer()
                     Button("Cancel", action: onCancel)
                         .buttonStyle(ClassicPushButtonStyle())
@@ -337,7 +370,7 @@ struct DownloadProgressView: View {
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 5) {
                         row("Saving:", item.request.filename)
                         row("Location:", item.request.url.absoluteString)
-                        row("Saving to:", "Downloads/\(item.destination.lastPathComponent)")
+                        row("Saving to:", displayPath(of: item.destination))
                         row("Status:", status)
                         row("Time Left:", timeLeft)
                     }
@@ -422,6 +455,23 @@ struct DownloadProgressView: View {
         let total = Int(seconds.rounded())
         return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
     }
+}
+
+/// A short, readable location like "Downloads/file.zip" or "~/Documents/file.zip".
+private func displayPath(of url: URL) -> String {
+    let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?
+        .resolvingSymlinksInPath().path
+    let folder = url.deletingLastPathComponent().resolvingSymlinksInPath().path
+    if folder == downloads {
+        return "Downloads/\(url.lastPathComponent)"
+    }
+    // Inside the sandbox, NSHomeDirectory() is the app's container, so use
+    // the user's real home folder to shorten the path.
+    let path = url.resolvingSymlinksInPath().path
+    if let home = getpwuid(getuid())?.pointee.pw_dir.map({ String(cString: $0) }), path.hasPrefix(home + "/") {
+        return "~" + path.dropFirst(home.count)
+    }
+    return path
 }
 
 /// The Finder icon for a file name's type.
