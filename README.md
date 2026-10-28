@@ -1,5 +1,7 @@
 # RetroNavigator
 
+[![GitHub Sponsor](https://img.shields.io/badge/sponsor-30363D?style=flat&logo=GitHub-Sponsors&logoColor=ea4aaa)](https://github.com/sponsors/jankammerath)
+
 A Netscape Navigator clone for macOS with support for Wayback Machine, Gopher and WAP, packed in the classic MacOS window style.
 
 Browse today's web — or travel back to the web of 1999 — in a faithful recreation of Netscape Navigator 4 running in a Mac OS 9 Platinum window.
@@ -13,6 +15,10 @@ Browse today's web — or travel back to the web of 1999 — in a faithful recre
 </p>
 
 ![RetroNavigator showing Google in 1999](/Screenshots/screenshot1.png)
+
+## Support this project
+
+This project is independently developed and maintained. If it helps you, and you enjoy using it, consider [sponsoring on GitHub](https://github.com/sponsors/jankammerath). Your support funds bug fixes, feature releases, and testing across different hardware environments.
 
 ## Features
 
